@@ -1,6 +1,6 @@
 # prod usage
 ```bash
-ja3exporter -interface ens3 -filter '(tcp[((tcp[12] & 0xf0) >>2)] = 0x16) && (tcp[((tcp[12] & 0xf0) >>2)+5] = 0x01)' --exclude-domains=linux.org,secure.linux.org
+ja3exporter -interface eth0 -filter '(tcp[((tcp[12] & 0xf0) >>2)] = 0x16) && (tcp[((tcp[12] & 0xf0) >>2)+5] = 0x01)' --exclude-domains=linux.org,secure.linux.org
 ```
 
 
