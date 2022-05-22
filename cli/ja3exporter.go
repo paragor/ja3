@@ -16,6 +16,7 @@ import (
 	"github.com/google/gopacket/pcapgo"
 	"github.com/paragor/ja3/pkg/ja3"
 	"io"
+	"log/syslog"
 	"os"
 	"strings"
 )
@@ -32,7 +33,21 @@ func main() {
 	filter := flag.String("filter", "", "bpf filter")
 	compat := flag.Bool("c", false, "Activates compatibility mode (use this if packet does not consist of a pure ETH/IP/TCP stack)")
 	excludeDomainsStr := flag.String("exclude-domains", "", "Excluded domains separated by comma(,). For example: linux.org,pornhub.com")
+
+	syslogNetwork := flag.String("syslog-network", "udp", "udp or tcp")
+	syslogAddr := flag.String("syslog-addr", "", "syslog addr like 192.168.20.20:514. if empty will be used os.Output")
+	syslogTag := flag.String("syslog-tag", "ja3exporter", "syslog-tag")
+
 	flag.Parse()
+
+	var out io.Writer = os.Stdout
+	var err error
+	if *syslogAddr != "" {
+		out, err = syslog.Dial(*syslogNetwork, *syslogAddr, syslog.LOG_LOCAL2|syslog.LOG_NOTICE, *syslogTag)
+		if err != nil {
+			panic(err)
+		}
+	}
 
 	excludedDomains := strings.Split(*excludeDomainsStr, ",")
 
@@ -50,9 +65,9 @@ func main() {
 
 		// Compute JA3 digests and output to os.Stdout
 		if *compat {
-			err = ComputeJA3FromReader(r, os.Stdout, excludedDomains)
+			err = ComputeJA3FromReader(r, out, excludedDomains)
 		} else {
-			err = CompatComputeJA3FromReader(r, os.Stdout, excludedDomains)
+			err = CompatComputeJA3FromReader(r, out, excludedDomains)
 		}
 		if err != nil {
 			panic(err)
@@ -71,9 +86,9 @@ func main() {
 
 		// Compute JA3 digests and output to os.Stdout
 		if *compat {
-			err = ComputeJA3FromReader(r, os.Stdout, excludedDomains)
+			err = ComputeJA3FromReader(r, out, excludedDomains)
 		} else {
-			err = CompatComputeJA3FromReader(r, os.Stdout, excludedDomains)
+			err = CompatComputeJA3FromReader(r, out, excludedDomains)
 		}
 		if err != nil {
 			panic(err)
@@ -87,9 +102,9 @@ func main() {
 
 		// Compute JA3 digests and output to os.Stdout
 		if *compat {
-			err = ComputeJA3FromReader(r, os.Stdout, excludedDomains)
+			err = ComputeJA3FromReader(r, out, excludedDomains)
 		} else {
-			err = CompatComputeJA3FromReader(r, os.Stdout, excludedDomains)
+			err = CompatComputeJA3FromReader(r, out, excludedDomains)
 		}
 		if err != nil {
 			panic(err)
