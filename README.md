@@ -1,3 +1,9 @@
+# prod usage
+```bash
+ja3exporter -interface ens3 -filter '(tcp[((tcp[12] & 0xf0) >>2)] = 0x16) && (tcp[((tcp[12] & 0xf0) >>2)+5] = 0x01)' --exclude-domains=linux.org,secure.linux.org
+```
+
+
 # JA3 - High Performance Go Implementation [![GoDoc](https://godoc.org/github.com/open-ch/ja3?status.svg)](https://godoc.org/github.com/open-ch/ja3) [![Go Report Card](https://goreportcard.com/badge/github.com/open-ch/ja3)](https://goreportcard.com/report/github.com/open-ch/ja3)
 
 "JA3 is a method for creating SSL/TLS client fingerprints that should be easy to produce on any platform and can be easily shared for threat intelligence." - John B. Althouse
