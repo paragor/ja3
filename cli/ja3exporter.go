@@ -17,6 +17,7 @@ import (
 	"github.com/paragor/ja3/pkg/ja3"
 	"io"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -30,7 +31,10 @@ func main() {
 	device := flag.String("interface", "", "Name of interface to be read (e.g. eth0)")
 	filter := flag.String("filter", "", "bpf filter")
 	compat := flag.Bool("c", false, "Activates compatibility mode (use this if packet does not consist of a pure ETH/IP/TCP stack)")
+	excludeDomainsStr := flag.String("exclude-domains", "", "Excluded domains separated by comma(,). For example: linux.org,pornhub.com")
 	flag.Parse()
+
+	excludedDomains := strings.Split(*excludeDomainsStr, ",")
 
 	if *pcap != "" {
 		// Read pcap file
@@ -46,9 +50,9 @@ func main() {
 
 		// Compute JA3 digests and output to os.Stdout
 		if *compat {
-			err = ComputeJA3FromReader(r, os.Stdout)
+			err = ComputeJA3FromReader(r, os.Stdout, excludedDomains)
 		} else {
-			err = CompatComputeJA3FromReader(r, os.Stdout)
+			err = CompatComputeJA3FromReader(r, os.Stdout, excludedDomains)
 		}
 		if err != nil {
 			panic(err)
@@ -67,9 +71,9 @@ func main() {
 
 		// Compute JA3 digests and output to os.Stdout
 		if *compat {
-			err = ComputeJA3FromReader(r, os.Stdout)
+			err = ComputeJA3FromReader(r, os.Stdout, excludedDomains)
 		} else {
-			err = CompatComputeJA3FromReader(r, os.Stdout)
+			err = CompatComputeJA3FromReader(r, os.Stdout, excludedDomains)
 		}
 		if err != nil {
 			panic(err)
@@ -83,9 +87,9 @@ func main() {
 
 		// Compute JA3 digests and output to os.Stdout
 		if *compat {
-			err = ComputeJA3FromReader(r, os.Stdout)
+			err = ComputeJA3FromReader(r, os.Stdout, excludedDomains)
 		} else {
-			err = CompatComputeJA3FromReader(r, os.Stdout)
+			err = CompatComputeJA3FromReader(r, os.Stdout, excludedDomains)
 		}
 		if err != nil {
 			panic(err)
@@ -95,6 +99,7 @@ func main() {
 		os.Exit(1)
 	}
 }
+
 // Reader provides an uniform interface when reading from different sources for the command line interface.
 type Reader interface {
 	ZeroCopyReadPacketData() ([]byte, gopacket.CaptureInfo, error)
@@ -129,7 +134,7 @@ func ReadFromInterface(device string, filter string) (Reader, error) {
 // the found Client Hellos in the stream in JSON format to the writer. It only supports packets consisting of a pure
 // ETH/IP/TCP stack but is very fast. If your packets have a different structure, use the CompatComputeJA3FromReader
 // function.
-func ComputeJA3FromReader(reader Reader, writer io.Writer) error {
+func ComputeJA3FromReader(reader Reader, writer io.Writer, excludedDomains []string) error {
 
 	// Build a selective parser which only decodes the needed layers
 	var ethernet layers.Ethernet
@@ -174,6 +179,10 @@ func ComputeJA3FromReader(reader Reader, writer io.Writer) error {
 					}
 				}
 
+				if inArray(j.GetSNI(), excludedDomains) {
+					continue
+				}
+
 				err = writeJSON(dstIP, int(tcp.DstPort), srcIP, int(tcp.SrcPort), ci.Timestamp.UnixNano(), j, writer)
 				if err != nil {
 					return err
@@ -185,10 +194,19 @@ func ComputeJA3FromReader(reader Reader, writer io.Writer) error {
 	return nil
 }
 
+func inArray(str string, arr []string) bool {
+	for _, el := range arr {
+		if el == str {
+			return true
+		}
+	}
+	return false
+}
+
 // CompatComputeJA3FromReader has the same functionality as ComputeJA3FromReader but supports any protocol that is
 // supported by the gopacket library. It is much slower than the ComputeJA3FromReader function and therefore should not
 // be used unless needed.
-func CompatComputeJA3FromReader(reader Reader, writer io.Writer) error {
+func CompatComputeJA3FromReader(reader Reader, writer io.Writer, excludedDomains []string) error {
 	for {
 		// Read packet data
 		packetData, ci, err := reader.ZeroCopyReadPacketData()
@@ -212,6 +230,10 @@ func CompatComputeJA3FromReader(reader Reader, writer io.Writer) error {
 
 			// Prepare capture info for JSON marshalling
 			src, dst := packet.NetworkLayer().NetworkFlow().Endpoints()
+
+			if inArray(j.GetSNI(), excludedDomains) {
+				continue
+			}
 
 			err = writeJSON(dst.String(), int(tcp.DstPort), src.String(), int(tcp.SrcPort), ci.Timestamp.UnixNano(), j, writer)
 			if err != nil {
