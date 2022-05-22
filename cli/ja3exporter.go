@@ -286,7 +286,6 @@ func writeJSON(dstIP string, dstPort int, srcIP string, srcPort int, timestamp i
 	}
 
 	// Write the JSON to the writer
-	writer.Write(js)
-	writer.Write([]byte("\n"))
+	writer.Write(append(js, '\n'))
 	return nil
 }
