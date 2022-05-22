@@ -263,9 +263,9 @@ func CompatComputeJA3FromReader(reader Reader, writer io.Writer, excludedDomains
 func writeJSON(dstIP string, dstPort int, srcIP string, srcPort int, timestamp int64, j *ja3.JA3, writer io.Writer) error {
 	// Use the same convention as in the official Python implementation
 	js, err := json.Marshal(struct {
-		DstIP     string `json:"destination_ip"`
-		DstPort   int    `json:"destination_port"`
-		JA3String string `json:"ja3"`
+		DstIP   string `json:"destination_ip"`
+		DstPort int    `json:"destination_port"`
+		//JA3String string `json:"ja3"`
 		JA3Hash   string `json:"ja3_digest"`
 		SrcIP     string `json:"source_ip"`
 		SrcPort   int    `json:"source_port"`
@@ -274,7 +274,7 @@ func writeJSON(dstIP string, dstPort int, srcIP string, srcPort int, timestamp i
 	}{
 		dstIP,
 		dstPort,
-		string(j.GetJA3String()),
+		//string(j.GetJA3String()),
 		j.GetJA3Hash(),
 		srcIP,
 		srcPort,
