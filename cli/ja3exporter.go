@@ -21,6 +21,12 @@ import (
 	"strings"
 )
 
+type Config struct {
+	withJa3String   bool
+	excludedDomains []string
+	includedDomains []string
+}
+
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s:\n\nCreates JA3 digests for TLS client fingerprinting.\n\n", os.Args[0])
@@ -32,7 +38,9 @@ func main() {
 	device := flag.String("interface", "", "Name of interface to be read (e.g. eth0)")
 	filter := flag.String("filter", "", "bpf filter")
 	compat := flag.Bool("c", false, "Activates compatibility mode (use this if packet does not consist of a pure ETH/IP/TCP stack)")
+	withJa3String := flag.Bool("with-ja3string", false, "with ja3 string (long line)")
 	excludeDomainsStr := flag.String("exclude-domains", "", "Excluded domains separated by comma(,). For example: linux.org,pornhub.com")
+	includedDomainsStr := flag.String("include-domains", "", "Included domains separated by comma(,). For example: linux.org,pornhub.com. Empty value = all domains")
 
 	syslogNetwork := flag.String("syslog-network", "udp", "udp or tcp")
 	syslogAddr := flag.String("syslog-addr", "", "syslog addr like 192.168.20.20:514. if empty will be used os.Output")
@@ -50,6 +58,12 @@ func main() {
 	}
 
 	excludedDomains := strings.Split(*excludeDomainsStr, ",")
+	includedDomains := strings.Split(*includedDomainsStr, ",")
+	conf := &Config{
+		withJa3String:   *withJa3String,
+		excludedDomains: excludedDomains,
+		includedDomains: includedDomains,
+	}
 
 	if *pcap != "" {
 		// Read pcap file
@@ -65,9 +79,9 @@ func main() {
 
 		// Compute JA3 digests and output to os.Stdout
 		if *compat {
-			err = ComputeJA3FromReader(r, out, excludedDomains)
+			err = ComputeJA3FromReader(r, out, conf)
 		} else {
-			err = CompatComputeJA3FromReader(r, out, excludedDomains)
+			err = CompatComputeJA3FromReader(r, out, conf)
 		}
 		if err != nil {
 			panic(err)
@@ -86,9 +100,9 @@ func main() {
 
 		// Compute JA3 digests and output to os.Stdout
 		if *compat {
-			err = ComputeJA3FromReader(r, out, excludedDomains)
+			err = ComputeJA3FromReader(r, out, conf)
 		} else {
-			err = CompatComputeJA3FromReader(r, out, excludedDomains)
+			err = CompatComputeJA3FromReader(r, out, conf)
 		}
 		if err != nil {
 			panic(err)
@@ -102,9 +116,9 @@ func main() {
 
 		// Compute JA3 digests and output to os.Stdout
 		if *compat {
-			err = ComputeJA3FromReader(r, out, excludedDomains)
+			err = ComputeJA3FromReader(r, out, conf)
 		} else {
-			err = CompatComputeJA3FromReader(r, out, excludedDomains)
+			err = CompatComputeJA3FromReader(r, out, conf)
 		}
 		if err != nil {
 			panic(err)
@@ -149,7 +163,7 @@ func ReadFromInterface(device string, filter string) (Reader, error) {
 // the found Client Hellos in the stream in JSON format to the writer. It only supports packets consisting of a pure
 // ETH/IP/TCP stack but is very fast. If your packets have a different structure, use the CompatComputeJA3FromReader
 // function.
-func ComputeJA3FromReader(reader Reader, writer io.Writer, excludedDomains []string) error {
+func ComputeJA3FromReader(reader Reader, writer io.Writer, conf *Config) error {
 
 	// Build a selective parser which only decodes the needed layers
 	var ethernet layers.Ethernet
@@ -194,11 +208,15 @@ func ComputeJA3FromReader(reader Reader, writer io.Writer, excludedDomains []str
 					}
 				}
 
-				if inArray(j.GetSNI(), excludedDomains) {
+				if len(conf.includedDomains) > 0 && !inArray(j.GetSNI(), conf.includedDomains) {
 					continue
 				}
 
-				err = writeJSON(dstIP, int(tcp.DstPort), srcIP, int(tcp.SrcPort), ci.Timestamp.UnixNano(), j, writer)
+				if inArray(j.GetSNI(), conf.excludedDomains) {
+					continue
+				}
+
+				err = writeJSON(dstIP, int(tcp.DstPort), srcIP, int(tcp.SrcPort), ci.Timestamp.UnixNano(), j, writer, conf.withJa3String)
 				if err != nil {
 					return err
 				}
@@ -221,7 +239,7 @@ func inArray(str string, arr []string) bool {
 // CompatComputeJA3FromReader has the same functionality as ComputeJA3FromReader but supports any protocol that is
 // supported by the gopacket library. It is much slower than the ComputeJA3FromReader function and therefore should not
 // be used unless needed.
-func CompatComputeJA3FromReader(reader Reader, writer io.Writer, excludedDomains []string) error {
+func CompatComputeJA3FromReader(reader Reader, writer io.Writer, conf *Config) error {
 	for {
 		// Read packet data
 		packetData, ci, err := reader.ZeroCopyReadPacketData()
@@ -246,11 +264,15 @@ func CompatComputeJA3FromReader(reader Reader, writer io.Writer, excludedDomains
 			// Prepare capture info for JSON marshalling
 			src, dst := packet.NetworkLayer().NetworkFlow().Endpoints()
 
-			if inArray(j.GetSNI(), excludedDomains) {
+			if len(conf.includedDomains) > 0 && !inArray(j.GetSNI(), conf.includedDomains) {
 				continue
 			}
 
-			err = writeJSON(dst.String(), int(tcp.DstPort), src.String(), int(tcp.SrcPort), ci.Timestamp.UnixNano(), j, writer)
+			if inArray(j.GetSNI(), conf.excludedDomains) {
+				continue
+			}
+
+			err = writeJSON(dst.String(), int(tcp.DstPort), src.String(), int(tcp.SrcPort), ci.Timestamp.UnixNano(), j, writer, conf.withJa3String)
 			if err != nil {
 				return err
 			}
@@ -259,28 +281,33 @@ func CompatComputeJA3FromReader(reader Reader, writer io.Writer, excludedDomains
 	return nil
 }
 
+type Output struct {
+	DstIP     string `json:"destination_ip"`
+	DstPort   int    `json:"destination_port"`
+	JA3String string `json:"ja3,omitempty"`
+	JA3Hash   string `json:"ja3_digest"`
+	SrcIP     string `json:"source_ip"`
+	SrcPort   int    `json:"source_port"`
+	SNI       string `json:"sni"`
+	Timestamp int64  `json:"timestamp"`
+}
+
 // writeJSON to writer
-func writeJSON(dstIP string, dstPort int, srcIP string, srcPort int, timestamp int64, j *ja3.JA3, writer io.Writer) error {
+func writeJSON(dstIP string, dstPort int, srcIP string, srcPort int, timestamp int64, j *ja3.JA3, writer io.Writer, withString bool) error {
 	// Use the same convention as in the official Python implementation
-	js, err := json.Marshal(struct {
-		DstIP   string `json:"destination_ip"`
-		DstPort int    `json:"destination_port"`
-		//JA3String string `json:"ja3"`
-		JA3Hash   string `json:"ja3_digest"`
-		SrcIP     string `json:"source_ip"`
-		SrcPort   int    `json:"source_port"`
-		SNI       string `json:"sni"`
-		Timestamp int64  `json:"timestamp"`
-	}{
-		dstIP,
-		dstPort,
-		//string(j.GetJA3String()),
-		j.GetJA3Hash(),
-		srcIP,
-		srcPort,
-		j.GetSNI(),
-		timestamp,
-	})
+	output := &Output{
+		DstIP:     dstIP,
+		DstPort:   dstPort,
+		JA3Hash:   j.GetJA3Hash(),
+		SrcIP:     srcIP,
+		SrcPort:   srcPort,
+		SNI:       j.GetSNI(),
+		Timestamp: timestamp,
+	}
+	if withString {
+		output.JA3String = string(j.GetJA3String())
+	}
+	js, err := json.Marshal(output)
 	if err != nil {
 		return err
 	}

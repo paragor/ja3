@@ -1,0 +1,20 @@
+[Unit]
+Description=ja3exporter https://github.com/paragor/ja3
+After=network.target
+
+[Service]
+Environment="GOMAXPROCS=8"
+
+Type=simple
+ExecStart=/usr/bin/ja3exporter \
+        -interface eth0 \
+        -filter '(tcp[((tcp[12] & 0xf0) >>2)] = 0x16) && (tcp[((tcp[12] & 0xf0) >>2)+5] = 0x01) and not src net 192.168.0.0/18' \
+        --exclude-domains=linux.org,pornhub.com \
+        --syslog-network udp \
+        --with-ja3string=true \
+        --syslog-tag ja3exporter \
+        --syslog-addr 127.0.0.1:512
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
