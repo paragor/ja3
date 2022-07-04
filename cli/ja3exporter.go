@@ -27,6 +27,17 @@ type Config struct {
 	includedDomains []string
 }
 
+func removeEmpty(strs []string) []string {
+	res := []string{}
+	for _, str := range strs {
+		if len(str) == 0 {
+			continue
+		}
+		res = append(res, str)
+	}
+	return res
+}
+
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s:\n\nCreates JA3 digests for TLS client fingerprinting.\n\n", os.Args[0])
@@ -61,8 +72,8 @@ func main() {
 	includedDomains := strings.Split(*includedDomainsStr, ",")
 	conf := &Config{
 		withJa3String:   *withJa3String,
-		excludedDomains: excludedDomains,
-		includedDomains: includedDomains,
+		excludedDomains: removeEmpty(excludedDomains),
+		includedDomains: removeEmpty(includedDomains),
 	}
 
 	if *pcap != "" {
